@@ -1,5 +1,4 @@
 import { Canvas } from '@react-three/fiber'
-import { SoftShadows } from '@react-three/drei'
 import * as THREE from 'three'
 import Beam from './scene/Beam'
 import CameraRig from './scene/CameraRig'
@@ -25,12 +24,11 @@ export default function App() {
         onCreated={({ gl, camera }) => {
           gl.toneMapping = THREE.NoToneMapping
           gl.outputColorSpace = THREE.SRGBColorSpace
-          gl.setClearColor('#050409', 1)
+          gl.setClearColor('#000000', 1)
           camera.lookAt(0, 0.38, 0)
         }}
       >
-        <color attach="background" args={['#050409']} />
-        <SoftShadows size={42} samples={16} focus={0.2} />
+        <color attach="background" args={['#000000']} />
         <CameraRig />
         <Lighting />
         <Room />

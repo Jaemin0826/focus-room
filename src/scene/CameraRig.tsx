@@ -64,8 +64,8 @@ export default function CameraRig() {
     const k = 1 - Math.pow(0.88, delta * 60)
     factor.current += (target.current - factor.current) * k
     // Floor reads as a diamond; keep generous black margin at the default zoom.
-    const zoomW = (size.width * 0.42) / 4.4
-    const zoomH = (size.height * 0.48) / 3.35
+    const zoomW = (size.width * 0.5) / 4.4
+    const zoomH = (size.height * 0.56) / 3.35
     camera.zoom = Math.min(zoomW, zoomH) * factor.current
     camera.position.set(9, 9, 9)
     camera.lookAt(LOOK)

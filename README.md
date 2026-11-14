@@ -1,6 +1,6 @@
 # Focus Room
 
-A visual prototype for a future work-timer: one task, one small room. This build is only the scene — an isometric 3×3 floor, two low back walls, and a cube standing in a narrow pool of warm light. There is no timer and no app logic yet.
+A visual prototype for a future work-timer: one task, one small room. This build is only the scene — an isometric 3×3 floor, two low back walls, and a cube under a narrow spotlight, drawn as a monochrome dotted wireframe on a curved CRT. Shading is an ordered dither, so the cube’s lit and dark faces read as pixel patterns. There is no timer and no app logic yet.
 
 Scroll or pinch to move closer and farther.
 
