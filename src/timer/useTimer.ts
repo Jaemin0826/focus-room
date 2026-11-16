@@ -4,24 +4,33 @@ import { supabase } from '../supabase'
 import { credentialsFor, validateLogin } from './identity'
 import { hasLocalRecords } from './localRecords'
 import {
+  buildTimeline,
   formatDuration,
   openSessions,
   taskTotalMs,
   todayTotalMs,
   sessionMs,
+  type EndReason,
+  type Milestone,
   type Phase,
   type Task,
   type WorkSession,
 } from './model'
 import {
+  addLocalMilestone,
   addLocalSession,
   addLocalTask,
+  addRemoteMilestone,
   addRemoteSession,
   addRemoteTask,
   closeLocalSessions,
   closeRemoteSessions,
+  deleteLocalMilestone,
+  deleteRemoteMilestone,
   loadLocalView,
   loadRemote,
+  setLocalEndReason,
+  setRemoteEndReason,
   settleOpen,
   uploadLocalRecords,
 } from './records'
@@ -37,6 +46,7 @@ export function useTimer() {
   const [ready, setReady] = useState(false)
   const [tasks, setTasks] = useState<Task[]>([])
   const [sessions, setSessions] = useState<WorkSession[]>([])
+  const [milestones, setMilestones] = useState<Milestone[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [phase, setPhase] = useState<Phase>('idle')
   const [now, setNow] = useState(() => Date.now())
@@ -49,32 +59,36 @@ export function useTimer() {
 
   const signedIn = user !== null
 
-  const apply = useCallback((nextTasks: Task[], nextSessions: WorkSession[], preferRunning: boolean) => {
-    const visible = nextTasks.filter((task) => !task.archived)
-    const running = openSessions(nextSessions).at(-1) ?? null
-    setTasks(visible)
-    setSessions(nextSessions)
-    if (running && preferRunning) {
-      setSelectedId(running.task_id)
-      setPhase('running')
-      return
-    }
-    setSelectedId((current) => (current && visible.some((task) => task.id === current) ? current : null))
-    if (!running) setPhase((current) => (current === 'running' ? 'idle' : current))
-  }, [])
+  const apply = useCallback(
+    (nextTasks: Task[], nextSessions: WorkSession[], nextMilestones: Milestone[], preferRunning: boolean) => {
+      const visible = nextTasks.filter((task) => !task.archived)
+      const running = openSessions(nextSessions).at(-1) ?? null
+      setTasks(visible)
+      setSessions(nextSessions)
+      setMilestones(nextMilestones)
+      if (running && preferRunning) {
+        setSelectedId(running.task_id)
+        setPhase('running')
+        return
+      }
+      setSelectedId((current) => (current && visible.some((task) => task.id === current) ? current : null))
+      if (!running) setPhase((current) => (current === 'running' ? 'idle' : current))
+    },
+    [],
+  )
 
   const refresh = useCallback(
     async (activeUser: User | null, preferRunning = true) => {
       if (!activeUser) {
         const local = loadLocalView()
         const settled = await settleOpen(local.sessions, false)
-        apply(local.tasks, settled, preferRunning)
+        apply(local.tasks, settled, local.milestones, preferRunning)
         setPendingLocal(false)
         return
       }
       const remote = await loadRemote()
       const settled = await settleOpen(remote.sessions, true)
-      apply(remote.tasks, settled, preferRunning)
+      apply(remote.tasks, settled, remote.milestones, preferRunning)
       setPendingLocal(hasLocalRecords())
     },
     [apply],
@@ -136,13 +150,17 @@ export function useTimer() {
   }, [])
 
   const closeOpen = useCallback(
-    async (current: WorkSession[]) => {
+    async (current: WorkSession[], reason: EndReason) => {
       const ids = openSessions(current).map((session) => session.id)
       if (ids.length === 0) return current
       const endedAt = new Date().toISOString()
-      if (signedIn) await closeRemoteSessions(ids, endedAt)
-      else closeLocalSessions(ids, endedAt)
-      return current.map((session) => (ids.includes(session.id) && session.ended_at === null ? { ...session, ended_at: endedAt } : session))
+      if (signedIn) await closeRemoteSessions(ids, endedAt, reason)
+      else closeLocalSessions(ids, endedAt, reason)
+      return current.map((session) =>
+        ids.includes(session.id) && session.ended_at === null
+          ? { ...session, ended_at: endedAt, end_reason: reason }
+          : session,
+      )
     },
     [signedIn],
   )
@@ -248,7 +266,7 @@ export function useTimer() {
     (id: string) =>
       guard(async () => {
         if (id === selectedId) return
-        const next = await closeOpen(sessions)
+        const next = await closeOpen(sessions, 'pause')
         setSessions(next)
         setSelectedId(id)
         setPhase('idle')
@@ -260,7 +278,7 @@ export function useTimer() {
     () =>
       guard(async () => {
         if (!selectedId || phase === 'running') return
-        const closed = await closeOpen(sessions)
+        const closed = await closeOpen(sessions, 'pause')
         const session = signedIn ? await addRemoteSession(selectedId) : addLocalSession(selectedId)
         setSessions([...closed, session])
         setPhase('running')
@@ -272,7 +290,7 @@ export function useTimer() {
     () =>
       guard(async () => {
         if (phase !== 'running') return
-        const next = await closeOpen(sessions)
+        const next = await closeOpen(sessions, 'pause')
         setSessions(next)
         setPhase('paused')
       }),
@@ -282,11 +300,52 @@ export function useTimer() {
   const stop = useCallback(
     () =>
       guard(async () => {
-        const next = await closeOpen(sessions)
-        setSessions(next)
+        const open = openSessions(sessions)
+        if (open.length > 0) {
+          setSessions(await closeOpen(sessions, 'stop'))
+        } else if (selectedId) {
+          const latest = sessions
+            .filter((session) => session.task_id === selectedId && session.ended_at)
+            .sort((a, b) => Date.parse(b.ended_at ?? '') - Date.parse(a.ended_at ?? ''))[0]
+          if (latest?.end_reason === 'pause') {
+            if (signedIn) await setRemoteEndReason(latest.id, 'stop')
+            else setLocalEndReason(latest.id, 'stop')
+            setSessions((current) =>
+              current.map((session) => (session.id === latest.id ? { ...session, end_reason: 'stop' } : session)),
+            )
+          }
+        }
         setPhase('idle')
       }),
-    [closeOpen, guard, sessions],
+    [closeOpen, guard, selectedId, sessions, signedIn],
+  )
+
+  const addMilestone = useCallback(
+    async (note: string) => {
+      const trimmed = note.normalize('NFC').trim()
+      if (!selectedId || !trimmed) {
+        setError('완료한 일을 입력하세요')
+        return false
+      }
+      return guard(async () => {
+        const sessionId = openSessions(sessions).find((session) => session.task_id === selectedId)?.id ?? null
+        const milestone = signedIn
+          ? await addRemoteMilestone(selectedId, trimmed, sessionId)
+          : addLocalMilestone(selectedId, trimmed, sessionId)
+        setMilestones((current) => [...current, milestone])
+      })
+    },
+    [guard, selectedId, sessions, signedIn],
+  )
+
+  const deleteMilestone = useCallback(
+    (id: string) =>
+      guard(async () => {
+        if (signedIn) await deleteRemoteMilestone(id)
+        else deleteLocalMilestone(id)
+        setMilestones((current) => current.filter((milestone) => milestone.id !== id))
+      }),
+    [guard, signedIn],
   )
 
   const migrate = useCallback(
@@ -307,6 +366,7 @@ export function useTimer() {
       mode: signedIn ? 'supabase' : 'local',
       tasks,
       sessions,
+      milestones,
     }
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -315,7 +375,7 @@ export function useTimer() {
     link.download = 'focus-room-records.json'
     link.click()
     URL.revokeObjectURL(url)
-  }, [sessions, signedIn, tasks])
+  }, [milestones, sessions, signedIn, tasks])
 
   const selected = tasks.find((task) => task.id === selectedId) ?? null
   const runningSession = openSessions(sessions).at(-1) ?? null
@@ -338,6 +398,11 @@ export function useTimer() {
   const displayName =
     (typeof user?.user_metadata?.display_name === 'string' && user.user_metadata.display_name) || user?.email || ''
 
+  const timeline = useMemo(
+    () => (selectedId ? buildTimeline(sessions, milestones, selectedId) : []),
+    [milestones, selectedId, sessions],
+  )
+
   return {
     ready,
     signedIn,
@@ -354,6 +419,7 @@ export function useTimer() {
     today: formatDuration(todayTotalMs(sessions, now)),
     totalFor: (taskId: string) => formatDuration(taskTotalMs(sessions, taskId, now)),
     runningTaskId: runningSession?.task_id ?? null,
+    timeline,
     signIn,
     createAccount,
     signOut,
@@ -362,6 +428,8 @@ export function useTimer() {
     start,
     pause,
     stop,
+    addMilestone,
+    deleteMilestone,
     migrate,
     exportJson,
   }

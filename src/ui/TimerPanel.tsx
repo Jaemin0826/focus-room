@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useTimer } from '../timer/useTimer'
 
 const STATUS = {
@@ -12,11 +12,20 @@ export function TimerPanel() {
   const [loginName, setLoginName] = useState('')
   const [pin, setPin] = useState('')
   const [taskName, setTaskName] = useState('')
+  const [noteOpen, setNoteOpen] = useState(false)
+  const [note, setNote] = useState('')
+  const timelineRef = useRef<HTMLDivElement>(null)
 
   const onLogin = (event: FormEvent) => {
     event.preventDefault()
     void timer.signIn(loginName, pin)
   }
+
+  useEffect(() => {
+    const node = timelineRef.current
+    if (!node) return
+    node.scrollTop = node.scrollHeight
+  }, [timer.timeline])
 
   const onAdd = (event: FormEvent) => {
     event.preventDefault()
@@ -102,6 +111,28 @@ export function TimerPanel() {
               </span>
               <span className="task-time">{timer.totalFor(task.id)}</span>
             </button>
+            {task.id === timer.selectedId ? (
+              <div className="timeline" ref={timelineRef}>
+                {timer.timeline.length === 0 ? <p className="timeline-empty">기록 없음</p> : null}
+                {timer.timeline.map((day) => (
+                  <section key={day.key}>
+                    <h3>{day.label}</h3>
+                    <ul>
+                      {day.items.map((item) => (
+                        <li key={item.id} className={item.kind === 'milestone' ? 'is-milestone' : undefined}>
+                          <span>{item.text}</span>
+                          {item.milestoneId ? (
+                            <button type="button" disabled={timer.busy} onClick={() => void timer.deleteMilestone(item.milestoneId!)}>
+                              삭제
+                            </button>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>
@@ -122,6 +153,48 @@ export function TimerPanel() {
           종료
         </button>
       </div>
+
+      {timer.selectedId ? (
+        noteOpen ? (
+          <form
+            className="panel-row"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void timer.addMilestone(note).then((saved) => {
+                if (saved) {
+                  setNote('')
+                  setNoteOpen(false)
+                }
+              })
+            }}
+          >
+            <input
+              aria-label="완료한 일"
+              value={note}
+              maxLength={80}
+              onChange={(event) => setNote(event.target.value)}
+            />
+            <button type="submit" disabled={timer.busy}>
+              저장
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setNoteOpen(false)
+                setNote('')
+              }}
+            >
+              취소
+            </button>
+          </form>
+        ) : (
+          <div className="panel-actions">
+            <button type="button" onClick={() => setNoteOpen(true)}>
+              + 완료
+            </button>
+          </div>
+        )
+      ) : null}
 
       <div className="panel-actions">
         {timer.signedIn && timer.pendingLocal ? (

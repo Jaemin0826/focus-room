@@ -21,7 +21,7 @@ Vite, React, TypeScript, Three.js, React Three Fiber, Drei, React Three Postproc
 
 Login is a display name plus a 4-digit PIN. The app turns that into a Supabase email and password so each person only sees their own rows.
 
-1. In the Supabase SQL Editor, run [`supabase/schema.sql`](supabase/schema.sql).
+1. In the Supabase SQL Editor, run [`supabase/schema.sql`](supabase/schema.sql) on a new project, or [`supabase/migrations/002_timeline_milestones.sql`](supabase/migrations/002_timeline_milestones.sql) if the first schema is already applied.
 2. Authentication → Sign In / Providers → Email: turn **Confirm email** off.
 
 Until the SQL has been run, the panel still times tasks in this browser. After login, **기록 옮기기** uploads those records.
