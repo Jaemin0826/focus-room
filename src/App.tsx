@@ -5,6 +5,7 @@ import CameraRig from './scene/CameraRig'
 import Effects from './scene/Effects'
 import Lighting from './scene/Lighting'
 import Room from './scene/Room'
+import { TimerPanel } from './ui/TimerPanel'
 
 export default function App() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
         <Beam />
         <Effects />
       </Canvas>
+      <TimerPanel />
       <p className="hint">스크롤해서 가까이 · 멀리</p>
     </div>
   )

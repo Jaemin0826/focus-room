@@ -1,6 +1,6 @@
 # Focus Room
 
-A visual prototype for a future work-timer: one task, one small room. This build is only the scene — an isometric 3×3 floor, two low back walls, and a cube under a narrow spotlight, drawn as a monochrome dotted wireframe on a curved CRT. Shading is an ordered dither, so the cube’s lit and dark faces read as pixel patterns. There is no timer and no app logic yet.
+A visual prototype for a future work-timer: one task, one small room. The scene is an isometric 3×3 floor and a cube on a monochrome CRT. A small panel tracks task time. Signed-in time is stored in Supabase; signed-out time stays in this browser until you move it.
 
 Scroll or pinch to move closer and farther.
 
@@ -15,7 +15,16 @@ The dev server uses the GitHub Pages base path, so open the `/focus-room/` URL V
 
 ## Stack
 
-Vite, React, TypeScript, Three.js, React Three Fiber, Drei, and React Three Postprocessing.
+Vite, React, TypeScript, Three.js, React Three Fiber, Drei, React Three Postprocessing, and Supabase.
+
+## Timer setup
+
+Login is a display name plus a 4-digit PIN. The app turns that into a Supabase email and password so each person only sees their own rows.
+
+1. In the Supabase SQL Editor, run [`supabase/schema.sql`](supabase/schema.sql).
+2. Authentication → Sign In / Providers → Email: turn **Confirm email** off.
+
+Until the SQL has been run, the panel still times tasks in this browser. After login, **기록 옮기기** uploads those records.
 
 ## Deploy
 
